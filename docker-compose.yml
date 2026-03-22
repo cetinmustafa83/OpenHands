@@ -22,7 +22,10 @@ services:
       - OH_SANDBOX_CONTAINER_URL_PATTERN=${OH_SANDBOX_CONTAINER_URL_PATTERN:-http://host.docker.internal:{port}}
       - OH_SANDBOX_HOST_PORT=${PORT:-3000}
       # Persist settings/secrets/conversations to the mounted volume
+      # FILE_STORE_PATH: V0 settings/secrets store path
       - FILE_STORE_PATH=/.openhands
+      # OH_PERSISTENCE_DIR: V1 app server persistence (SQLite DB, JWT keys, conversations)
+      - OH_PERSISTENCE_DIR=/.openhands
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
       # Expose agent server sandbox port range for WebSocket connections
@@ -31,8 +34,12 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${OPENHANDS_DATA_DIR:-~/.openhands}:/.openhands
+      - openhands-data:/.openhands
       - ${WORKSPACE_BASE:-$PWD/workspace}:/opt/workspace_base
     pull_policy: build
     stdin_open: true
     tty: true
+
+volumes:
+  openhands-data:
+    driver: local
