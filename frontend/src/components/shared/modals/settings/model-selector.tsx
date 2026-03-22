@@ -7,15 +7,9 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
-import {
-  VERIFIED_MODELS,
-  VERIFIED_PROVIDERS,
-  VERIFIED_OPENHANDS_MODELS,
-} from "#/utils/verified-models";
+import { VERIFIED_MODELS, VERIFIED_PROVIDERS } from "#/utils/verified-models";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { cn } from "#/utils/utils";
-import { HelpLink } from "#/ui/help-link";
-import { PRODUCT_URL } from "#/utils/constants";
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -45,13 +39,7 @@ export function ModelSelector({
   );
   const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
 
-  // Get the appropriate verified models array based on the selected provider
-  const getVerifiedModels = () => {
-    if (selectedProvider === "openhands") {
-      return VERIFIED_OPENHANDS_MODELS;
-    }
-    return VERIFIED_MODELS;
-  };
+  const getVerifiedModels = () => VERIFIED_MODELS;
 
   React.useEffect(() => {
     if (currentModel) {
@@ -156,17 +144,6 @@ export function ModelSelector({
           ) : null}
         </Autocomplete>
       </fieldset>
-
-      {selectedProvider === "openhands" && (
-        <HelpLink
-          testId="openhands-account-help"
-          text={t(I18nKey.SETTINGS$NEED_OPENHANDS_ACCOUNT)}
-          linkText={t(I18nKey.SETTINGS$CLICK_HERE)}
-          href={PRODUCT_URL.PRODUCTION}
-          size="settings"
-          linkColor="white"
-        />
-      )}
 
       <fieldset className="flex flex-col gap-2.5 w-full">
         <label className={cn("text-sm", labelClassName)}>

@@ -27,7 +27,7 @@ async def get_llm_models_dependency(request: Request) -> list[str]:
     Override this in enterprise/saas mode via app.dependency_overrides.
     """
 
-    return get_supported_llm_models(config, [])
+    return get_supported_llm_models(config)
 
 
 @app.get('/models')

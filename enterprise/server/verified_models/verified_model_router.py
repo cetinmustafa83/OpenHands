@@ -131,7 +131,7 @@ async def get_saas_llm_models_dependency(request: Request) -> list[str]:
                 detail='Too many models defined in database',
             )
         verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
-        return get_supported_llm_models(config, verified_models)
+        return get_supported_llm_models(config)
 
 
 # Override the default implementation with SaaS implementation
