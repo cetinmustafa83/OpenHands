@@ -96,20 +96,45 @@ class DockerSandboxService(SandboxService):
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
 
-    def _find_unused_port(self) -> int:
+    def _get_docker_used_ports(self) -> set[int]:
+        """Return the set of host ports currently bound by Docker containers."""
+        used: set[int] = set()
+        try:
+            for container in self.docker_client.containers.list():
+                ports = container.attrs.get('NetworkSettings', {}).get('Ports', {})
+                for bindings in ports.values():
+                    if bindings:
+                        for b in bindings:
+                            try:
+                                used.add(int(b['HostPort']))
+                            except (KeyError, ValueError):
+                                pass
+        except Exception:
+            pass
+        return used
+
+    def _find_unused_port(self, exclude: set[int] | None = None) -> int:
         """Find an unused port on the host machine.
 
         If SANDBOX_PORT_RANGE_START and SANDBOX_PORT_RANGE_END are set,
         picks a free port within that range (useful for reverse proxy setups).
+        Also checks Docker's current port mappings to avoid collisions.
         Otherwise, lets the OS assign any free port.
         """
+        import random
+
+        docker_used = self._get_docker_used_ports()
+        if exclude:
+            docker_used |= exclude
+
         range_start = os.getenv('SANDBOX_PORT_RANGE_START')
         range_end = os.getenv('SANDBOX_PORT_RANGE_END')
         if range_start and range_end:
-            import random
             ports = list(range(int(range_start), int(range_end) + 1))
             random.shuffle(ports)
             for port in ports:
+                if port in docker_used:
+                    continue
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     try:
                         s.bind(('', port))
@@ -456,38 +481,57 @@ class DockerSandboxService(SandboxService):
         if self.use_host_network:
             _logger.info(f'Starting sandbox {container_name} with host network mode')
 
-        try:
-            # Create and start the container
-            container = self.docker_client.containers.run(  # type: ignore[call-overload]
-                image=sandbox_spec.id,
-                command=sandbox_spec.command,  # Use default command from image
-                remove=False,
-                name=container_name,
-                environment=env_vars,
-                ports=port_mappings,
-                volumes=volumes,
-                working_dir=sandbox_spec.working_dir,
-                labels=labels,
-                detach=True,
-                # Use Docker's tini init process to ensure proper signal handling and reaping of
-                # zombie child processes.
-                init=True,
-                # Allow agent-server containers to resolve host.docker.internal
-                # and other custom hostnames for LAN deployments
-                # Note: extra_hosts is not needed with host network mode
-                extra_hosts=self.extra_hosts
-                if self.extra_hosts and not self.use_host_network
-                else None,
-                # Network mode: 'host' for host networking, None for default bridge
-                network_mode=network_mode,
-            )
+        max_retries = 3
+        last_error: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                # Create and start the container
+                container = self.docker_client.containers.run(  # type: ignore[call-overload]
+                    image=sandbox_spec.id,
+                    command=sandbox_spec.command,  # Use default command from image
+                    remove=False,
+                    name=container_name,
+                    environment=env_vars,
+                    ports=port_mappings,
+                    volumes=volumes,
+                    working_dir=sandbox_spec.working_dir,
+                    labels=labels,
+                    detach=True,
+                    # Use Docker's tini init process to ensure proper signal handling and reaping of
+                    # zombie child processes.
+                    init=True,
+                    # Allow agent-server containers to resolve host.docker.internal
+                    # and other custom hostnames for LAN deployments
+                    # Note: extra_hosts is not needed with host network mode
+                    extra_hosts=self.extra_hosts
+                    if self.extra_hosts and not self.use_host_network
+                    else None,
+                    # Network mode: 'host' for host networking, None for default bridge
+                    network_mode=network_mode,
+                )
 
-            sandbox_info = await self._container_to_sandbox_info(container)
-            assert sandbox_info is not None
-            return sandbox_info
+                sandbox_info = await self._container_to_sandbox_info(container)
+                assert sandbox_info is not None
+                return sandbox_info
 
-        except APIError as e:
-            raise SandboxError(f'Failed to start container: {e}')
+            except APIError as e:
+                last_error = e
+                # Retry on port binding conflicts by picking new ports
+                if 'port is already allocated' in str(e) and not self.use_host_network:
+                    _logger.warning(
+                        f'Port conflict on attempt {attempt + 1}/{max_retries}, retrying with new ports: {e}'
+                    )
+                    already_used = set(port_mappings.values()) if port_mappings else set()
+                    port_mappings = {}
+                    for exposed_port in self.exposed_ports:
+                        host_port = self._find_unused_port(exclude=already_used)
+                        already_used.add(host_port)
+                        port_mappings[exposed_port.container_port] = host_port
+                        env_vars[exposed_port.name] = str(exposed_port.container_port)
+                else:
+                    break
+
+        raise SandboxError(f'Failed to start container: {last_error}')
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""
