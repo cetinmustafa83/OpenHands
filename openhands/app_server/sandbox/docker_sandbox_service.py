@@ -97,7 +97,28 @@ class DockerSandboxService(SandboxService):
     use_host_network: bool = False
 
     def _find_unused_port(self) -> int:
-        """Find an unused port on the host machine."""
+        """Find an unused port on the host machine.
+
+        If SANDBOX_PORT_RANGE_START and SANDBOX_PORT_RANGE_END are set,
+        picks a free port within that range (useful for reverse proxy setups).
+        Otherwise, lets the OS assign any free port.
+        """
+        range_start = os.getenv('SANDBOX_PORT_RANGE_START')
+        range_end = os.getenv('SANDBOX_PORT_RANGE_END')
+        if range_start and range_end:
+            import random
+            ports = list(range(int(range_start), int(range_end) + 1))
+            random.shuffle(ports)
+            for port in ports:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    try:
+                        s.bind(('', port))
+                        return port
+                    except OSError:
+                        continue
+            raise RuntimeError(
+                f'No free port found in range {range_start}-{range_end}'
+            )
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(('', 0))
             s.listen(1)

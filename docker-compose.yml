@@ -14,8 +14,17 @@ services:
       - OH_SECRET_KEY=${OH_SECRET_KEY:-}
       - LOG_ALL_EVENTS=${LOG_ALL_EVENTS:-false}
       - PORT=${PORT:-3000}
+      # Agent server sandbox ports: exposed range so reverse proxies (traefik) can route WebSocket connections
+      - SANDBOX_PORT_RANGE_START=${SANDBOX_PORT_RANGE_START:-30100}
+      - SANDBOX_PORT_RANGE_END=${SANDBOX_PORT_RANGE_END:-30200}
+      # URL pattern for agent server containers — set to your external hostname so the browser can reach them
+      # Example: OH_SANDBOX_CONTAINER_URL_PATTERN=http://myhost.example.com:{port}
+      - OH_SANDBOX_CONTAINER_URL_PATTERN=${OH_SANDBOX_CONTAINER_URL_PATTERN:-http://host.docker.internal:{port}}
+      - OH_SANDBOX_HOST_PORT=${PORT:-3000}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
+      # Expose agent server sandbox port range for WebSocket connections
+      - "${SANDBOX_PORT_RANGE_START:-30100}-${SANDBOX_PORT_RANGE_END:-30200}:${SANDBOX_PORT_RANGE_START:-30100}-${SANDBOX_PORT_RANGE_END:-30200}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
