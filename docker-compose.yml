@@ -10,9 +10,12 @@ services:
       - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
       - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-1.12.0-python}
       #- SANDBOX_USER_ID=${SANDBOX_USER_ID:-1234} # enable this only if you want a specific non-root sandbox user but you will have to manually adjust permissions of ~/.openhands for this user
-      - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
+      - WORKSPACE_MOUNT_PATH=${WORKSPACE_MOUNT_PATH:-$PWD/workspace}
+      - OH_SECRET_KEY=${OH_SECRET_KEY:-}
+      - LOG_ALL_EVENTS=${LOG_ALL_EVENTS:-false}
+      - PORT=${PORT:-3000}
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
