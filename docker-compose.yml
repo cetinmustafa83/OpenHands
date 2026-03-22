@@ -21,6 +21,8 @@ services:
       # Example: OH_SANDBOX_CONTAINER_URL_PATTERN=http://myhost.example.com:{port}
       - OH_SANDBOX_CONTAINER_URL_PATTERN=${OH_SANDBOX_CONTAINER_URL_PATTERN:-http://host.docker.internal:{port}}
       - OH_SANDBOX_HOST_PORT=${PORT:-3000}
+      # Persist settings/secrets/conversations to the mounted volume
+      - FILE_STORE_PATH=/.openhands
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
       # Expose agent server sandbox port range for WebSocket connections
@@ -29,7 +31,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.openhands:/.openhands
+      - ${OPENHANDS_DATA_DIR:-~/.openhands}:/.openhands
       - ${WORKSPACE_BASE:-$PWD/workspace}:/opt/workspace_base
     pull_policy: build
     stdin_open: true
