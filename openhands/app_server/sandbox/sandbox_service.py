@@ -166,6 +166,10 @@ class SandboxService(ABC):
 
         for exposed_url in sandbox.exposed_urls:
             if exposed_url.name == AGENT_SERVER:
+                # Prefer internal_url for direct container communication (bypasses Traefik).
+                # Fall back to url with localhost→host.docker.internal replacement.
+                if exposed_url.internal_url:
+                    return exposed_url.internal_url
                 return replace_localhost_hostname_for_docker(exposed_url.url)
 
         raise SandboxError(f'No agent server URL found for sandbox: {sandbox.id}')

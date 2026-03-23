@@ -21,6 +21,10 @@ class ExposedUrl(BaseModel):
     name: str
     url: str
     port: int
+    internal_url: str | None = None
+    """Direct URL for server-side communication (bypasses reverse proxies like Traefik).
+    When set, the app server uses this URL for health checks and API calls to the agent
+    container. The `url` field is the externally-accessible URL given to the browser."""
 
 
 # Standard names

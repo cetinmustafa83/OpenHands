@@ -245,11 +245,18 @@ class DockerSandboxService(SandboxService):
                                 if matching_port.name == VSCODE:
                                     url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
 
+                                # Always provide a direct internal URL for server-side
+                                # communication (health checks, API calls from app server).
+                                # This bypasses any reverse proxy (e.g. Traefik) that may
+                                # be configured via container_url_pattern.
+                                internal_url = f'http://host.docker.internal:{host_port}'
+
                                 exposed_urls.append(
                                     ExposedUrl(
                                         name=matching_port.name,
                                         url=url,
                                         port=matching_port.container_port,
+                                        internal_url=internal_url,
                                     )
                                 )
 
@@ -276,14 +283,15 @@ class DockerSandboxService(SandboxService):
             and self.health_check_path is not None
             and sandbox_info.exposed_urls
         ):
-            app_server_url = next(
-                exposed_url.url
+            agent_exposed = next(
+                exposed_url
                 for exposed_url in sandbox_info.exposed_urls
                 if exposed_url.name == AGENT_SERVER
             )
+            # Use internal_url for direct container communication when available
+            # (bypasses Traefik or other reverse proxies configured via container_url_pattern)
+            app_server_url = agent_exposed.internal_url or replace_localhost_hostname_for_docker(agent_exposed.url)
             try:
-                # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
-                app_server_url = replace_localhost_hostname_for_docker(app_server_url)
 
                 response = await self.httpx_client.get(
                     f'{app_server_url}{self.health_check_path}'
