@@ -130,17 +130,16 @@ class DockerSandboxService(SandboxService):
         range_start = os.getenv('SANDBOX_PORT_RANGE_START')
         range_end = os.getenv('SANDBOX_PORT_RANGE_END')
         if range_start and range_end:
+            # When running inside a Docker container, socket.bind() checks the
+            # container's network namespace, not the host's. That makes it
+            # unreliable for discovering free HOST ports.  _get_docker_used_ports()
+            # already queries the Docker daemon for all host-bound ports, so
+            # trusting that result is both correct and container-safe.
             ports = list(range(int(range_start), int(range_end) + 1))
             random.shuffle(ports)
             for port in ports:
-                if port in docker_used:
-                    continue
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    try:
-                        s.bind(('', port))
-                        return port
-                    except OSError:
-                        continue
+                if port not in docker_used:
+                    return port
             raise RuntimeError(
                 f'No free port found in range {range_start}-{range_end}'
             )
