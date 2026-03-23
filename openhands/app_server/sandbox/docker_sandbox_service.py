@@ -465,6 +465,23 @@ class DockerSandboxService(SandboxService):
             'sandbox_spec_id': sandbox_spec.id,
         }
 
+        # Add Traefik labels for path-based WebSocket routing when OH_TRAEFIK_NETWORK is set.
+        # This allows WebSocket connections to go through Traefik (port 80/443) instead of
+        # requiring direct host port access (needed for NAT/home server deployments).
+        if self.traefik_network and port_mappings:
+            agent_host_port = port_mappings.get(8000)
+            if agent_host_port:
+                path_prefix = f'/runtime/{agent_host_port}'
+                rname = f'oh-agent-{agent_host_port}'
+                labels.update({
+                    'traefik.enable': 'true',
+                    f'traefik.http.routers.{rname}.rule': f'PathPrefix(`{path_prefix}`)',
+                    f'traefik.http.routers.{rname}.entrypoints': 'web,websecure',
+                    f'traefik.http.routers.{rname}.middlewares': f'{rname}-strip',
+                    f'traefik.http.middlewares.{rname}-strip.stripprefix.prefixes': path_prefix,
+                    f'traefik.http.services.{rname}.loadbalancer.server.port': '8000',
+                })
+
         # Prepare volumes
         volumes = {
             mount.host_path: {
@@ -508,6 +525,20 @@ class DockerSandboxService(SandboxService):
                     # Network mode: 'host' for host networking, None for default bridge
                     network_mode=network_mode,
                 )
+
+                # Connect to Traefik network so Traefik can route to the container
+                if self.traefik_network and not self.use_host_network:
+                    try:
+                        traefik_net = self.docker_client.networks.get(self.traefik_network)
+                        traefik_net.connect(container)
+                        _logger.info(
+                            f'Connected {container_name} to Traefik network {self.traefik_network}'
+                        )
+                    except Exception as e:
+                        _logger.warning(
+                            f'Could not connect {container_name} to Traefik network '
+                            f'{self.traefik_network}: {e}'
+                        )
 
                 sandbox_info = await self._container_to_sandbox_info(container)
                 assert sandbox_info is not None
@@ -665,6 +696,18 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'This allows containers to resolve hostnames like host.docker.internal '
             'for LAN deployments and MCP connections. '
             'Format: {"hostname": "ip_or_gateway"}'
+        ),
+    )
+    traefik_network: str | None = Field(
+        default=None,
+        description=(
+            'Docker network name that Traefik is connected to (e.g. "dokploy-network"). '
+            'When set, agent-server containers join this network and receive Traefik labels '
+            'for path-based WebSocket routing via /runtime/{port}/. '
+            'This allows WebSocket traffic to flow through Traefik on port 80/443 instead '
+            'of requiring direct host port access — required for NAT/home server setups. '
+            'Also set OH_SANDBOX_CONTAINER_URL_PATTERN to http://YOUR_HOSTNAME/runtime/{port}. '
+            'Configure via OH_TRAEFIK_NETWORK environment variable.'
         ),
     )
     startup_grace_seconds: int = Field(

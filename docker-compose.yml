@@ -16,9 +16,13 @@ services:
       # Agent server sandbox ports: exposed range so browser can reach WebSocket connections
       - SANDBOX_PORT_RANGE_START=${SANDBOX_PORT_RANGE_START:-30100}
       - SANDBOX_PORT_RANGE_END=${SANDBOX_PORT_RANGE_END:-30200}
-      # URL pattern for agent server containers — set to your external hostname so the browser can reach them
-      # Example: OH_SANDBOX_CONTAINER_URL_PATTERN=http://myhost.example.com:{port}
-      - OH_SANDBOX_CONTAINER_URL_PATTERN=${OH_SANDBOX_CONTAINER_URL_PATTERN:-http://host.docker.internal:{port}}
+      # Traefik integration: routes WebSocket through Traefik (80/443) instead of direct host ports.
+      # Required for NAT/home-server deployments where only 80/443 are forwarded.
+      # Set OH_TRAEFIK_NETWORK to your Traefik Docker network (Dokploy default: dokploy-network).
+      # Set OH_SANDBOX_CONTAINER_URL_PATTERN to http://YOUR_EXTERNAL_HOSTNAME/runtime/{port}
+      # Example: OH_SANDBOX_CONTAINER_URL_PATTERN=http://ai-openhands-6bdd7d-92-206-22-80.traefik.me/runtime/{port}
+      - OH_TRAEFIK_NETWORK=${OH_TRAEFIK_NETWORK:-dokploy-network}
+      - OH_SANDBOX_CONTAINER_URL_PATTERN=${OH_SANDBOX_CONTAINER_URL_PATTERN:-http://localhost:{port}}
       - OH_SANDBOX_HOST_PORT=3000
       # Persist settings/secrets/conversations to the mounted volume
       # FILE_STORE_PATH: V0 settings/secrets store path
