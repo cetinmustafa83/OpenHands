@@ -241,9 +241,16 @@ def config_from_env() -> AppServerConfig:
                 docker_sandbox_kwargs['host_port'] = int(
                     os.environ['SANDBOX_HOST_PORT']
                 )
-            if os.getenv('SANDBOX_CONTAINER_URL_PATTERN'):
-                docker_sandbox_kwargs['container_url_pattern'] = os.environ[
-                    'SANDBOX_CONTAINER_URL_PATTERN'
+            # OH_SANDBOX_CONTAINER_URL_PATTERN takes priority, falls back to legacy name
+            container_url_pattern = os.getenv(
+                'OH_SANDBOX_CONTAINER_URL_PATTERN'
+            ) or os.getenv('SANDBOX_CONTAINER_URL_PATTERN')
+            if container_url_pattern:
+                docker_sandbox_kwargs['container_url_pattern'] = container_url_pattern
+            # Traefik network for path-based WebSocket routing (NAT/home-server deployments)
+            if os.getenv('OH_TRAEFIK_NETWORK'):
+                docker_sandbox_kwargs['traefik_network'] = os.environ[
+                    'OH_TRAEFIK_NETWORK'
                 ]
             # Allow configuring sandbox startup grace period
             # This is useful for slower machines or cloud environments where
