@@ -9,8 +9,26 @@ export interface WebSocketHookOptions {
   reconnect?: {
     enabled?: boolean;
     maxAttempts?: number;
+    /** Base delay in ms for exponential backoff (default: 1000) */
+    baseDelay?: number;
+    /** Maximum delay cap in ms (default: 30000) */
+    maxDelay?: number;
   };
 }
+
+/**
+ * Computes the next reconnect delay using exponential backoff with full jitter.
+ * Formula: random(0, min(maxDelay, baseDelay * 2^attempt))
+ */
+const getReconnectDelay = (
+  attempt: number,
+  baseDelay: number,
+  maxDelay: number,
+): number => {
+  const exponential = Math.min(maxDelay, baseDelay * 2 ** attempt);
+  // Full jitter: random value in [0, exponential] to spread reconnect storms
+  return Math.floor(Math.random() * exponential);
+};
 
 export const useWebSocket = <T = string>(
   url: string,
@@ -94,6 +112,8 @@ export const useWebSocket = <T = string>(
       const reconnectEnabled = optionsRef.current?.reconnect?.enabled ?? false;
       const maxAttempts =
         optionsRef.current?.reconnect?.maxAttempts ?? Infinity;
+      const baseDelay = optionsRef.current?.reconnect?.baseDelay ?? 1000;
+      const maxDelay = optionsRef.current?.reconnect?.maxDelay ?? 30000;
 
       if (
         reconnectEnabled &&
@@ -102,11 +122,16 @@ export const useWebSocket = <T = string>(
         attemptCountRef.current < maxAttempts
       ) {
         setIsReconnecting(true);
+        const delay = getReconnectDelay(
+          attemptCountRef.current,
+          baseDelay,
+          maxDelay,
+        );
         attemptCountRef.current += 1;
 
         reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket();
-        }, 3000); // 3 second delay
+        }, delay);
       } else {
         setIsReconnecting(false);
       }
