@@ -20,9 +20,10 @@ export function extractBaseHost(
         browserHostname !== "localhost" &&
         browserHostname !== "127.0.0.1"
       ) {
-        return `${browserHostname}:${url.port}`;
+        // Only include port if it's non-default (url.port is "" for port 80/443)
+        return url.port ? `${browserHostname}:${url.port}` : browserHostname;
       }
-      return url.host; // e.g., "localhost:3000"
+      return url.host; // e.g., "localhost:3000" or "hostname" (no port for 80/443)
     } catch {
       return window.location.host;
     }

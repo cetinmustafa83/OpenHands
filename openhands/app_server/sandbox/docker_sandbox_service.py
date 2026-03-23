@@ -5,6 +5,7 @@ import socket
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import AsyncGenerator
+from urllib.parse import urlparse
 
 import base62
 import docker
@@ -482,12 +483,28 @@ class DockerSandboxService(SandboxService):
             if agent_host_port:
                 path_prefix = f'/runtime/{agent_host_port}'
                 rname = f'oh-agent-{agent_host_port}'
+
+                # Build Traefik router rule. CRITICAL: must include Host() so this route
+                # has higher priority than the main OpenHands app's Host-only route.
+                # In Traefik v2, priority = rule string length; Host(long-name) alone
+                # beats PathPrefix() alone, causing WebSocket requests to go to the main
+                # app instead of the agent container. Host+PathPrefix combined wins.
+                _pattern_host = urlparse(
+                    self.container_url_pattern.replace('{port}', '0')
+                ).hostname or ''
+                if _pattern_host and _pattern_host not in ('localhost', '127.0.0.1'):
+                    router_rule = (
+                        f'Host(`{_pattern_host}`) && PathPrefix(`{path_prefix}`)'
+                    )
+                else:
+                    router_rule = f'PathPrefix(`{path_prefix}`)'
+
                 labels.update({
                     'traefik.enable': 'true',
                     # Tell Traefik which Docker network to use for routing to this container.
                     # Without this, Traefik may pick the default bridge network IP (unreachable).
                     'traefik.docker.network': self.traefik_network,
-                    f'traefik.http.routers.{rname}.rule': f'PathPrefix(`{path_prefix}`)',
+                    f'traefik.http.routers.{rname}.rule': router_rule,
                     f'traefik.http.routers.{rname}.entrypoints': 'web,websecure',
                     f'traefik.http.routers.{rname}.middlewares': f'{rname}-strip',
                     # Explicitly bind router to service (avoids Traefik auto-link ambiguity)
