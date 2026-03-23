@@ -690,7 +690,7 @@ export function ConversationWebSocketProvider({
 
     return {
       queryParams,
-      reconnect: { enabled: true },
+      reconnect: { enabled: true, maxAttempts: 10 },
       onOpen: async () => {
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
@@ -754,7 +754,7 @@ export function ConversationWebSocketProvider({
 
     return {
       queryParams,
-      reconnect: { enabled: true },
+      reconnect: { enabled: true, maxAttempts: 10 },
       onOpen: async () => {
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
