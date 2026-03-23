@@ -173,19 +173,20 @@ async def _get_agent_server_context(
             content={'error': 'No agent server URL found for sandbox'},
         )
 
-    agent_server_url = None
+    agent_exposed = None
     for exposed_url in sandbox.exposed_urls:
         if exposed_url.name == AGENT_SERVER:
-            agent_server_url = exposed_url.url
+            agent_exposed = exposed_url
             break
 
-    if not agent_server_url:
+    if not agent_exposed:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={'error': 'Agent server URL not found in sandbox'},
         )
 
-    agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+    # Prefer internal_url for direct container communication (bypasses Traefik)
+    agent_server_url = agent_exposed.internal_url or replace_localhost_hostname_for_docker(agent_exposed.url)
 
     return AgentServerContext(
         conversation=conversation,
@@ -522,16 +523,17 @@ async def read_conversation_file(
     if not sandbox.exposed_urls:
         return ''
 
-    agent_server_url = None
+    agent_exposed = None
     for exposed_url in sandbox.exposed_urls:
         if exposed_url.name == AGENT_SERVER:
-            agent_server_url = exposed_url.url
+            agent_exposed = exposed_url
             break
 
-    if not agent_server_url:
+    if not agent_exposed:
         return ''
 
-    agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+    # Prefer internal_url for direct container communication (bypasses Traefik)
+    agent_server_url = agent_exposed.internal_url or replace_localhost_hostname_for_docker(agent_exposed.url)
 
     # Create remote workspace
     remote_workspace = AsyncRemoteWorkspace(

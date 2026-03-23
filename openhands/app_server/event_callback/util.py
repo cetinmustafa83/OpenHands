@@ -48,8 +48,8 @@ def get_agent_server_url_from_sandbox(sandbox: SandboxInfo) -> str:
         raise RuntimeError(f'No exposed URLs configured for sandbox {sandbox.id!r}')
 
     try:
-        agent_server_url = next(
-            exposed_url.url
+        agent_exposed = next(
+            exposed_url
             for exposed_url in exposed_urls
             if exposed_url.name == AGENT_SERVER
         )
@@ -58,4 +58,6 @@ def get_agent_server_url_from_sandbox(sandbox: SandboxInfo) -> str:
             f'No {AGENT_SERVER!r} URL found for sandbox {sandbox.id!r}'
         ) from None
 
-    return replace_localhost_hostname_for_docker(agent_server_url)
+    if agent_exposed.internal_url:
+        return agent_exposed.internal_url
+    return replace_localhost_hostname_for_docker(agent_exposed.url)

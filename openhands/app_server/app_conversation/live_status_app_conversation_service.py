@@ -738,13 +738,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """Get agent server url for running sandbox."""
         exposed_urls = sandbox.exposed_urls
         assert exposed_urls is not None
-        agent_server_url = next(
-            exposed_url.url
+        agent_exposed = next(
+            exposed_url
             for exposed_url in exposed_urls
             if exposed_url.name == AGENT_SERVER
         )
-        agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
-        return agent_server_url
+        # Prefer internal_url for direct container communication (bypasses Traefik)
+        if agent_exposed.internal_url:
+            return agent_exposed.internal_url
+        return replace_localhost_hostname_for_docker(agent_exposed.url)
 
     def _inherit_configuration_from_parent(
         self, request: AppConversationStartRequest, parent_info: AppConversationInfo
