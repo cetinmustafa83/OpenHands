@@ -25,10 +25,6 @@ services:
       - FILE_STORE_PATH=/.openhands
       # OH_PERSISTENCE_DIR: V1 app server persistence (SQLite DB, JWT keys, conversations)
       - OH_PERSISTENCE_DIR=/.openhands
-    ports:
-      # Main app port: NOT exposed on host — Traefik routes directly to container:3000 via Docker network
-      # Agent server sandbox ports: exposed on host so browser can open WebSocket connections
-      - "${SANDBOX_PORT_RANGE_START:-30100}-${SANDBOX_PORT_RANGE_END:-30200}:${SANDBOX_PORT_RANGE_START:-30100}-${SANDBOX_PORT_RANGE_END:-30200}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
