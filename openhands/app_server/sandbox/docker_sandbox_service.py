@@ -475,23 +475,32 @@ class DockerSandboxService(SandboxService):
             'sandbox_spec_id': sandbox_spec.id,
         }
 
-        # Add Traefik labels for path-based WebSocket routing when OH_TRAEFIK_NETWORK is set.
-        # This allows WebSocket connections to go through Traefik (port 80/443) instead of
-        # requiring direct host port access (needed for NAT/home server deployments).
+        # Add Traefik labels for path-based routing when OH_TRAEFIK_NETWORK is set.
+        # IMPORTANT: we must add a route for EVERY exposed port (AGENT_SERVER, VSCODE,
+        # WORKER_1, WORKER_2). Without a route for a port, Traefik falls through to
+        # the main OpenHands app, which serves the React SPA. The SPA then tries to
+        # match e.g. /runtime/30165/ as a React Router path → "No routes matched" crash
+        # → the whole conversation page breaks and WebSocket never connects.
         if self.traefik_network and port_mappings:
-            agent_host_port = port_mappings.get(8000)
-            if agent_host_port:
-                path_prefix = f'/runtime/{agent_host_port}'
-                rname = f'oh-agent-{agent_host_port}'
+            # Extract hostname from container_url_pattern for Host() rule.
+            # CRITICAL: must include Host() so agent routes have higher priority than
+            # the main app's Host-only route. In Traefik v2, priority = rule string
+            # length; Host(long-name) alone beats PathPrefix() alone.
+            _pattern_host = urlparse(
+                self.container_url_pattern.replace('{port}', '0')
+            ).hostname or ''
 
-                # Build Traefik router rule. CRITICAL: must include Host() so this route
-                # has higher priority than the main OpenHands app's Host-only route.
-                # In Traefik v2, priority = rule string length; Host(long-name) alone
-                # beats PathPrefix() alone, causing WebSocket requests to go to the main
-                # app instead of the agent container. Host+PathPrefix combined wins.
-                _pattern_host = urlparse(
-                    self.container_url_pattern.replace('{port}', '0')
-                ).hostname or ''
+            # Always set traefik.enable and network once (per-container globals)
+            labels['traefik.enable'] = 'true'
+            labels['traefik.docker.network'] = self.traefik_network
+
+            for exposed_port in self.exposed_ports:
+                host_port = port_mappings.get(exposed_port.container_port)
+                if not host_port:
+                    continue
+                path_prefix = f'/runtime/{host_port}'
+                rname = f'oh-agent-{host_port}'
+
                 if _pattern_host and _pattern_host not in ('localhost', '127.0.0.1'):
                     router_rule = (
                         f'Host(`{_pattern_host}`) && PathPrefix(`{path_prefix}`)'
@@ -500,17 +509,15 @@ class DockerSandboxService(SandboxService):
                     router_rule = f'PathPrefix(`{path_prefix}`)'
 
                 labels.update({
-                    'traefik.enable': 'true',
-                    # Tell Traefik which Docker network to use for routing to this container.
-                    # Without this, Traefik may pick the default bridge network IP (unreachable).
-                    'traefik.docker.network': self.traefik_network,
                     f'traefik.http.routers.{rname}.rule': router_rule,
                     f'traefik.http.routers.{rname}.entrypoints': 'web,websecure',
                     f'traefik.http.routers.{rname}.middlewares': f'{rname}-strip',
-                    # Explicitly bind router to service (avoids Traefik auto-link ambiguity)
                     f'traefik.http.routers.{rname}.service': rname,
                     f'traefik.http.middlewares.{rname}-strip.stripprefix.prefixes': path_prefix,
-                    f'traefik.http.services.{rname}.loadbalancer.server.port': '8000',
+                    # Each port routes to its own container port (8000/8001/8011/8012)
+                    f'traefik.http.services.{rname}.loadbalancer.server.port': str(
+                        exposed_port.container_port
+                    ),
                 })
 
         # Prepare volumes
