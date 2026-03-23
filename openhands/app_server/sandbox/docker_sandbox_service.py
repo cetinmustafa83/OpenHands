@@ -484,9 +484,14 @@ class DockerSandboxService(SandboxService):
                 rname = f'oh-agent-{agent_host_port}'
                 labels.update({
                     'traefik.enable': 'true',
+                    # Tell Traefik which Docker network to use for routing to this container.
+                    # Without this, Traefik may pick the default bridge network IP (unreachable).
+                    'traefik.docker.network': self.traefik_network,
                     f'traefik.http.routers.{rname}.rule': f'PathPrefix(`{path_prefix}`)',
                     f'traefik.http.routers.{rname}.entrypoints': 'web,websecure',
                     f'traefik.http.routers.{rname}.middlewares': f'{rname}-strip',
+                    # Explicitly bind router to service (avoids Traefik auto-link ambiguity)
+                    f'traefik.http.routers.{rname}.service': rname,
                     f'traefik.http.middlewares.{rname}-strip.stripprefix.prefixes': path_prefix,
                     f'traefik.http.services.{rname}.loadbalancer.server.port': '8000',
                 })
@@ -510,18 +515,18 @@ class DockerSandboxService(SandboxService):
         last_error: Exception | None = None
         for attempt in range(max_retries):
             try:
-                # Create and start the container
-                container = self.docker_client.containers.run(  # type: ignore[call-overload]
+                # Create the container (not yet started) so we can connect it to the
+                # Traefik network before starting. This ensures Traefik discovers the
+                # container with the correct network IP on first observation.
+                container = self.docker_client.containers.create(  # type: ignore[call-overload]
                     image=sandbox_spec.id,
-                    command=sandbox_spec.command,  # Use default command from image
-                    remove=False,
+                    command=sandbox_spec.command,
                     name=container_name,
                     environment=env_vars,
                     ports=port_mappings,
                     volumes=volumes,
                     working_dir=sandbox_spec.working_dir,
                     labels=labels,
-                    detach=True,
                     # Use Docker's tini init process to ensure proper signal handling and reaping of
                     # zombie child processes.
                     init=True,
@@ -535,7 +540,9 @@ class DockerSandboxService(SandboxService):
                     network_mode=network_mode,
                 )
 
-                # Connect to Traefik network so Traefik can route to the container
+                # Connect to Traefik network BEFORE starting the container.
+                # This guarantees Traefik sees the container already on the correct
+                # network when it first receives the Docker "start" event.
                 if self.traefik_network and not self.use_host_network:
                     try:
                         traefik_net = self.docker_client.networks.get(self.traefik_network)
@@ -548,6 +555,8 @@ class DockerSandboxService(SandboxService):
                             f'Could not connect {container_name} to Traefik network '
                             f'{self.traefik_network}: {e}'
                         )
+
+                container.start()
 
                 sandbox_info = await self._container_to_sandbox_info(container)
                 assert sandbox_info is not None
