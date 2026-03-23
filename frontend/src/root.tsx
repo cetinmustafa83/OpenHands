@@ -32,6 +32,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function HydrateFallback() {
+  return (
+    <div className="flex items-center justify-center h-screen bg-neutral-900">
+      <div className="w-8 h-8 border-4 border-neutral-600 border-t-white rounded-full animate-spin" />
+    </div>
+  );
+}
+
 export const meta: MetaFunction = () => [
   { title: "OpenHands" },
   { name: "description", content: "Let's Start Building!" },
