@@ -95,6 +95,7 @@ class DockerSandboxService(SandboxService):
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
+    traefik_network: str | None = None
 
     def _get_docker_used_ports(self) -> set[int]:
         """Return the set of host ports currently bound by Docker containers."""
@@ -761,4 +762,5 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 extra_hosts=self.extra_hosts,
                 startup_grace_seconds=self.startup_grace_seconds,
                 use_host_network=self.use_host_network,
+                traefik_network=self.traefik_network,
             )
